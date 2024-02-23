@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+const { exit } = require('process');
+
+// 引数チェック
+for (let index = 2; index < process.argv.length; index++) {
+  if (process.argv.length < 3 ||
+      !['production', 'development', 'clearTables', 'createTables', 'alterTables', 'insertMasterData']
+        .includes(process.argv[index])){
+    console.log(`USAGE:
+      node www [$ENV] [clearTables] [createTables] [alterTables] [insertMasterData]
+        $ENV: production or development (default: development)
+            load config.js by development values
+        clearTables: run clearTables.sql 2 files both common and app default not run
+        createTables: run createTables.sql 2 files both common and app default not run
+        alterTables: run alterTables.sql 2 files both common and app default not run
+        insertMasterData: run insertMasterData.sql 2 files both common and app default not run
+    `);
+    exit(0);
+  }
+}
+
+const config = require('../config');
+
+console.log(`config: ${JSON.stringify(config)}`);
+
+const dbInitialize = require('../common/persistence/base/initialize');
+
+const dbInit = () => {
+  dbInitialize.init(true).then(() => {
+    console.log('DB TableCreation Success');
+  }).catch((err) => {
+    console.error(`DB TableCreation Error \n ${err}`);
+  });
+};
+
+/**
+ * cluster
+ */
+if(config.CLUSTER.useCluster){
+  const cluster = require('cluster');
+
+  if(cluster.isMaster){
+
+    for(let i = 0; i < config.CLUSTER.numClusters; i++){
+      // create worker
+      cluster.fork();
+    }
+    // message
+    Object.keys(cluster.workers).forEach((id) => {
+      cluster.workers[id].on('message', () => {
+        console.log(`run id: ${JSON.stringify(id)}`);
+      });
+    });
+
+    // when child cluster exit restart
+    if(config.CLUSTER.isRestartWhenDied){
+      cluster.on('exit', function(worker, code, signal) {
+        console.error('Worker %d died with code/signal %s, Restart worker', worker.process.pid, signal || code);
+        cluster.fork();
+      });
+    }
+  } else {
+    dbInit();
+    initializeApplication();
+  }
+} else {
+  dbInit();
+  initializeApplication();
+}
+
+function initializeApplication() {
+  /**
+   * Module dependencies.
+   */
+  const app = require('../app');
+  const debug = require('debug')('nodeAppBase:server');
+  const http = require('http');
+  // const { getSystemErrorMap } = require('util');
+
+  /**
+   * Get port from environment and store in Express.
+   */
+  const normalizePort = (val) => {
+    //Normalize a port into a number, string, or false.
+    const port = parseInt(val, 10);
+    if (isNaN(port)) {
+      // named pipe
+      return val;
+    }
+    if (port >= 0) {
+      // port number
+      return port;
+    }
+    return false;
+  };
+
+  const port = normalizePort(config.SERVER_PORT);
+  app.set('port', port);
+
+
+  /**
+   * Create HTTP server.
+   */
+  const server = http.createServer(app);
+
+  /**
+   * Listen on provided port, on all network interfaces.
+   */
+  server.listen(port);
+  server.on('error', (error) => {
+    //Event listener for HTTP server "error" event.
+    if (error.syscall !== 'listen') {
+      throw error;
+    }
+
+    const bind = typeof port === 'string'
+      ? 'Pipe ' + port
+      : 'Port ' + port;
+
+    // handle specific listen errors with friendly messages
+    switch (error.code) {
+      case 'EACCES':
+        console.error(bind + ' requires elevated privileges');
+        process.exit(1);
+        break;
+      case 'EADDRINUSE':
+        console.error(bind + ' is already in use');
+        process.exit(1);
+        break;
+      default:
+        throw error;
+    }
+  });
+  server.on('listening', () => {
+    //Event listener for HTTP server "listening" event.
+    const addr = server.address();
+    const bind = typeof addr === 'string'
+      ? 'pipe ' + addr
+      : 'port ' + addr.port;
+    console.log(bind);
+    debug('Listening on ' + bind);
+  });
+
+  const appInit = require('../app/appInit');
+  appInit.appendInitServer(server);
+}

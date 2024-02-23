@@ -1,0 +1,7 @@
+*.log
+node_modules/*
+configSecret.js
+.error.log.*
+.system.log.*
+configSecret.json
+package-lock.json
