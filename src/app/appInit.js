@@ -3,7 +3,7 @@ const express = require('express');
 
 /** app.js から app が渡されるので、ルーターをセットする */
 exports.appRouter = (app) => {
-    app.use('/app/test', require('./routes/test').router);
+    app.use('/app/title', require('./routes/title').router);
 };
 
 /** persistence/base/initialize が ファイルによるテーブル・データの初期化時に呼ばれるので、

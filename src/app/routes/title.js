@@ -3,21 +3,17 @@ const { VALIDATOR: V } = require('../../common/validateParams');
 const router = express.Router();
 const { doRoute } = require('../../common/routes/base/routeBase');
 const db = require('../../common/persistence/simple');
-const { getTest, insertTestTransaction } = require('../persistence/test');
+const { insertTitle, getTitles } = require('../persistence/title');
 
 /** get test */
 router.get('/get',
-  [
-    V.numeric('id', true),
-  ],
   async function(req, res) {
     doRoute(req, res, async (r, auth) => {
-      const { id } = req.query
-      const datas = await getTest(id);
+      const titleList = await getTitles();
       // TEST
       return {
-        result: 'hogehogeOK',
-        datas,
+        result: 0,
+        titleList,
       };
     });
   }
@@ -26,15 +22,17 @@ router.get('/get',
 /** post test */
 router.post('/post',
   [
-    V.anyLengthSanitized('name', 256, true),
+   V.anyLengthSanitized('titleName', 256, true),
+   V.anyLengthSanitized('overview', 256, true),
+   V.anyLengthSanitized('genre', 256, true),
   ],
   async function(req, res) {
-    doRoute(req, res, async (r, auth) => {
-      const { name } = req.body;
+    doRoute(req, res, async () => {
+      const { titleName, overview, genre } = req.body;
       const connection = await db.getConnection();
       try {
         await db.beginTransaction(connection);
-        await insertTestTransaction(connection, name, 'USER');
+        await insertTitle(connection, titleName, overview, genre);
         await db.commitTransaction(connection);
       } catch (err) {
         await db.rollbackTransaction(connection);
